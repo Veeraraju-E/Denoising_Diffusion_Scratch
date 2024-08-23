@@ -37,3 +37,4 @@ class LinearNoiseScheduler:
         original_shape = original.shape
         batch_size = original_shape[0]
 
+        sqrt_alpha_cumulative = self.sqrt_alpha_cumulative[t].reshape(batch_size)
