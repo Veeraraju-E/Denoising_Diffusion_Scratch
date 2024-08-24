@@ -1,5 +1,8 @@
 import torch
 
+
+# Noisy Image -> Denoising Diffusion Distribution -> Probabilistic Model -> Predicted Noise
+
 class LinearNoiseScheduler:
     def __init__(self, num_timesteps, beta_start, beta_end):
         """
