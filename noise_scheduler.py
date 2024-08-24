@@ -50,3 +50,38 @@ class LinearNoiseScheduler:
         # we need to return sqrt(alpha_bar_t) * x0 + sqrt(1 - alpha_bar_t)*epsilon
         print(f"noise.shape : {noise.shape}, original.shape : {original.shape}")
         return sqrt_alpha_cumulative * original + sqrt_one_minus_alpha_cumulative * noise
+
+    # now, we need a function to take in x_t and return a sampled datapoint from the reverse distribution
+    def sample_from_reverse(self, x_t, noise_pred, t):
+        """
+        sampling based on previous time step
+        :param x_t: x_t
+        :param noise_pred: noise predicted from our models
+        :param t: time step
+        :return:
+        """
+
+        # from the reverse distribution, we can say that x_0 = (x_t - sqrt(1 - alpha_bar_t)*noise_pred)/(sqrt(alpha_bar_t))
+        x_0 = (x_t - self.sqrt_one_minus_alpha_cumulative[t] * noise_pred) / (self.sqrt_alpha_cumulative[t])
+
+        # imp!, don't forget to clamp x_0
+        x_0 = torch.clamp(x_0, -1, 1.)
+
+        print(f"in sample_from_reverse, x_0.shape : {x_0.shape}")
+        # now, for the actual sampling, let's use mean and std given by
+        # mu = (x_t - (1-alpha_t)*noise_pred/sqrt(1-alpha_bar_t))/(sqrt(alpha_bar_t))
+        mu = (x_t - (self.betas[t]*noise_pred)/self.sqrt_one_minus_alpha_cumulative[t])/torch.sqrt(self.alphas[t])
+
+        # also, we have a base case for t = 0
+        if t == 0:
+            return mu, x_0
+        else:
+            # now, we add noise after calculating var
+            # var => same as variance conditioned on ground truth denoising distribution, given by (1-alpha_t)*(1-alpha_bar_(t-1))/(1-alpha_bar_t)
+            var = self.betas[t] * self.alpha_cumulative[t-1] / (1 - self.alpha_cumulative[t])
+            z = torch.randn(x_t.shape).to(x_t.device)
+
+            # basically, we have to use the re-parameterization trick here (similar to VAEs)
+            return mu + (var**0.5)*z, x_0
+
+        # this completes Noise Scheduler!!
