@@ -14,6 +14,29 @@ import torch.nn as nn
 # The Ups block would have the up-sampling layer, along with the same ResNet + Self Attention module (skip connections are transferred just like UNet)
 # Need to use the time-embeddings also (as part of input to ResNet?)
 
+# First, the method to get the time embeddings
+def get_time_embedding(time_steps, embedding_dim):
+    """
+
+    :param time_steps: batch of time steps of every sample [B]
+    :param embedding_dim: how much do we want our embedding dimension to be
+    :return: [B, embedding_dim] representation of the timestep information
+    """
+    # time embeddings basically contain sin(pos/10000^(2i/d_model)) and cos(pos/10000^(2i/d_model)) terms,
+    # which have a common factor -> calculate it first
+    half_embedding_dim = embedding_dim // 2
+    common_factors = 100000**((torch.arange(
+        start = 0,
+        end = half_embedding_dim,
+        device = time_steps.device
+    )) / half_embedding_dim
+    )
+
+    # evaluate only half of the embeddings, as we need to include both the sin and cosine portions, together which yields embedding_dim
+    half_time_embedding = time_steps[:None].repeat(1, half_embedding_dim) / common_factors
+    time_embedding = torch.cat([torch.sin(half_time_embedding), torch.cos(half_embedding_dim)], dim=-1)
+    return time_embedding
+
 class UNetModel(nn.Module):
     def __init__(self, in_channels=3, out_channels=3):
         super().__init__()
