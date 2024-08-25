@@ -12,12 +12,12 @@ import torch.nn as nn
 # The Downs block needs to have a ResNet + Self Attention module, then a down-sampling layer
 # The bottleneck should also be modified - 1 ResNet, then Self Attention + ResNet module (HF implementation)
 # The Ups block would have the up-sampling layer, along with the same ResNet + Self Attention module (skip connections are transferred just like UNet)
-# Need to use the time-embeddings also (as part of input to ResNet?)
+# Need to use the time-embeddings also (where?!)
 
 # First, the method to get the time embeddings
 def get_time_embedding(time_steps, embedding_dim):
     """
-
+    this is to solve the t -> pos_embeddings part only
     :param time_steps: batch of time steps of every sample [B]
     :param embedding_dim: how much do we want our embedding dimension to be
     :return: [B, embedding_dim] representation of the timestep information
