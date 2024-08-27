@@ -51,7 +51,8 @@ class DownsBlock(nn.Module):
         self.out_channels = out_channels
         self.down_sampler = down_sampler
 
-        self.actual_time_embeddings_network = nn.Sequential(
+        # Simple network for obtaining the actual time embeddings
+        self.time_embedding_network = nn.Sequential(
             nn.SiLU(),
             nn.Linear(embedding_dim, out_channels)
         )
@@ -68,11 +69,26 @@ class DownsBlock(nn.Module):
             nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1)
         )
 
+        # The Attention Block
         self.attention_block_norm = nn.GroupNorm(num_groups=8, num_channels=self.out_channels)
         self.attention_block_multihead = nn.MultiheadAttention(self.out_channels, num_attenion_heads, batch_first=True)
 
         # a simple 1x1 Conv to make residual connection from the input to the output of the last conv layer
         self.residual_connection = nn.Conv2d(self.in_channels, self.out_channels, 1)
+
         # down sampling layer
         self.down_sample = nn.Conv2d(self.out_channels, self.out_channels, kernel_size=4, stride=2, padding=1) \
             if self.down_sampler else nn.Identity()
+
+    def forward(self, x, time_embedding):
+        x_copy_for_out = x
+
+        # Forward pass thru ResNet blocks
+        resnet_input = x_copy_for_out
+        out = self.resnet_block_conv_1(resnet_input)
+        out += self.time_embedding_network(time_embedding)[:, :, None, None]
+        out = self.resnet_block_conv_2(out)
+        out += self.residual_connection(resnet_input)
+
+        # Forward pass thru Attention Block (attention for all pixels in (h, w))
+        batch_size, c, h, x = out.shape # c acts as the feature dimensionality
