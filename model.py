@@ -104,3 +104,64 @@ class DownsBlock(nn.Module):
         out = self.down_sampler(out)
 
         return out
+
+
+# Now, we need to code up the bottleneck section / Mid-block => ResNet, then Self Attention + ResNet
+class BottleNeck(nn.Module):
+    def __init__(self, in_channels, out_channels, embedding_dim, num_attenion_heads):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.embedding_dim = embedding_dim
+        self.num_attention_heads = num_attenion_heads
+
+        # here, we actually need two instances of the same kind of layers as used in DownsBlock
+        self.resnet_conv_block_1 = nn.ModuleList([
+            nn.Sequential(
+                nn.GroupNorm(num_groups=8, num_channels=self.in_channels),
+                nn.SiLU(),
+                nn.Conv2d(self.in_channels, self.out_channels, 3, 1, 1)
+            ),
+            nn.Sequential(
+                nn.GroupNorm(num_groups=8, num_channels=self.out_channels),
+                nn.SiLU(),
+                nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1)
+            )
+        ])
+
+        self.time_embedding_network = nn.ModuleList([
+            nn.Sequential(
+                nn.SiLU(),
+                nn.Linear(embedding_dim, self.out_channels)
+            ),
+            nn.Sequential(
+                nn.SiLU(),
+                nn.Linear(embedding_dim, self.out_channels)
+            )
+        ])
+
+        self.resnet_conv_block_2 = nn.ModuleList([
+            nn.Sequential(
+                nn.GroupNorm(num_groups=8, num_channels=self.out_channels),
+                nn.SiLU(),
+                nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1)
+            ),
+            nn.Sequential(
+                nn.GroupNorm(num_groups=8, num_channels=self.out_channels),
+                nn.SiLU(),
+                nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1)
+            )
+        ])
+
+        # Attention layers
+        self.attention_block_norm = nn.GroupNorm(num_groups=8, num_channels=self.out_channels)
+        self.attention_block_multihead = nn.MultiheadAttention(self.out_channels, num_attenion_heads, batch_first=True)
+
+        self.residual_connection = nn.ModuleList([
+            nn.Conv2d(self.in_channels, self.out_channels, 1),
+            nn.Conv2d(self.out_channels, self.out_channels, 1)
+        ])
+
+    def forward(self, x, time_embedding):
+        # the only difference here is the way we stitch the layers together
+        pass
