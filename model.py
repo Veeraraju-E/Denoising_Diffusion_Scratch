@@ -91,4 +91,16 @@ class DownsBlock(nn.Module):
         out += self.residual_connection(resnet_input)
 
         # Forward pass thru Attention Block (attention for all pixels in (h, w))
-        batch_size, c, h, x = out.shape # c acts as the feature dimensionality
+        batch_size, c, h, w = out.shape # c acts as the feature dimensionality
+        in_attention_layer = out.reshape(batch_size, c, h*w)
+        in_attention_layer = self.attention_block_norm(in_attention_layer)
+        in_attention_layer = in_attention_layer.transpose(1, 2) # to ensure that the channels are last dimension
+
+        out_attention_layer = self.attention_block_multihead(in_attention_layer, in_attention_layer, in_attention_layer)
+        out_attention_layer = out_attention_layer.transpose(1, 2).reshape(batch_size, c, h, w)
+        out += out_attention_layer
+
+        # Lastly, the down sampler
+        out = self.down_sampler(out)
+
+        return out
