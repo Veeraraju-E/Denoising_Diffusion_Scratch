@@ -13,7 +13,7 @@ def get_time_embedding(time_steps, embedding_dim):
     this is to solve the t -> pos_embeddings part only
     :param time_steps: batch of time steps of every sample [B]
     :param embedding_dim: how much do we want our embedding dimension to be
-    :return: [B, embedding_dim] representation of the timestep information
+    :return: [B, embedding_dim] representation of the timestep information (for every sample, we have an embedding)
     """
     # time embeddings basically contain sin(pos/10000^(2i/d_model)) and cos(pos/10000^(2i/d_model)) terms,
     # which have a common factor -> calculate it first
@@ -108,12 +108,21 @@ class DownsBlock(nn.Module):
 
 # Now, we need to code up the bottleneck section / Mid-block => ResNet, then Self Attention + ResNet
 class BottleNeck(nn.Module):
-    def __init__(self, in_channels, out_channels, embedding_dim, num_attenion_heads):
+    def __init__(self, in_channels, out_channels, embedding_dim, num_attenion_heads, down_sample):
+        """
+        bottle neck layer between downsample block and upsample block
+        :param in_channels:
+        :param out_channels:
+        :param embedding_dim:
+        :param num_attention_heads: number of attention heads
+        :param down_sample: down sample or not True/False
+        """
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.embedding_dim = embedding_dim
         self.num_attention_heads = num_attenion_heads
+        self.down_sample = down_sample
 
         # here, we actually need two instances of the same kind of layers as used in DownsBlock
         self.resnet_conv_block_1 = nn.ModuleList([
@@ -161,6 +170,9 @@ class BottleNeck(nn.Module):
             nn.Conv2d(self.in_channels, self.out_channels, 1),
             nn.Conv2d(self.out_channels, self.out_channels, 1)
         ])
+
+        self.down_sample_conv_block = nn.Conv2d(out_channels, out_channels, kernel_size=4, stride=2, padding=1) \
+            if self.down_sample else nn.Identity()
 
     def forward(self, x, time_embedding):
         # the only difference here is the way we stitch the layers together

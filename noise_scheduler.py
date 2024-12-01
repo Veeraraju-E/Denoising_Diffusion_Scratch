@@ -77,7 +77,7 @@ class LinearNoiseScheduler:
 
         # also, we have a base case for t = 0
         if t == 0:
-            return mu, x_0
+            return mu, x_0  # simply return mean (without noise)
         else:
             # now, we add noise after calculating var
             # var => same as variance conditioned on ground truth denoising distribution, given by (1-alpha_t)*(1-alpha_bar_(t-1))/(1-alpha_bar_t)
