@@ -45,11 +45,11 @@ def get_time_embedding(time_steps, embedding_dim):
 # (x_2, cat with x_3) -> Down Sample -> z
 
 class DownsBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, embedding_dim, down_sampler, num_attenion_heads):
+    def __init__(self, in_channels, out_channels, embedding_dim, down_sample, num_attenion_heads):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
-        self.down_sampler = down_sampler
+        self.down_sample = down_sample
 
         # Simple network for obtaining the actual time embeddings
         self.time_embedding_network = nn.Sequential(
@@ -78,51 +78,48 @@ class DownsBlock(nn.Module):
 
         # down sampling layer
         self.down_sample = nn.Conv2d(self.out_channels, self.out_channels, kernel_size=4, stride=2, padding=1) \
-            if self.down_sampler else nn.Identity()
+            if self.down_sample else nn.Identity()
 
     def forward(self, x, time_embedding):
-        x_copy_for_out = x
+        out = x
 
-        # Forward pass thru ResNet blocks
-        resnet_input = x_copy_for_out
-        out = self.resnet_block_conv_1(resnet_input)
+        # Resnet block 1
+        resnet_input = out
+        out = self.resnet_conv_block_1(resnet_input)
         out += self.time_embedding_network(time_embedding)[:, :, None, None]
-        out = self.resnet_block_conv_2(out)
-        out += self.residual_connection(resnet_input)
 
-        # Forward pass thru Attention Block (attention for all pixels in (h, w))
-        batch_size, c, h, w = out.shape # c acts as the feature dimensionality
-        in_attention_layer = out.reshape(batch_size, c, h*w)
-        in_attention_layer = self.attention_block_norm(in_attention_layer)
-        in_attention_layer = in_attention_layer.transpose(1, 2) # to ensure that the channels are last dimension
+        # Resnet block 2
+        out = self.resnet_conv_block_2(out)
+        out += self.residual_connection(out)
 
-        out_attention_layer = self.attention_block_multihead(in_attention_layer, in_attention_layer, in_attention_layer)
-        out_attention_layer = out_attention_layer.transpose(1, 2).reshape(batch_size, c, h, w)
-        out += out_attention_layer
+        # Attention between all the h * w pixels
+        B, C, H, W = out.shape
+        input_attn = out.reshape(B, C, H * W)
+        input_attn = self.attention_block_norm(input_attn)
+        input_attn = input_attn.transpose(1, 2) # ensure that channels is at end to apply attention
 
-        # Lastly, the down sampler
-        out = self.down_sampler(out)
-
+        output_attn, _ = self.attention_block_multihead(input_attn, input_attn, input_attn)
+        output_attn = output_attn.transpose(1, 2).reshape(B, C, H, W)   # reshape after briging back the colors dim to match input
+        
+        out += output_attn  # add back the residual connection
         return out
 
 
 # Now, we need to code up the bottleneck section / Mid-block => ResNet, then Self Attention + ResNet
 class BottleNeck(nn.Module):
-    def __init__(self, in_channels, out_channels, embedding_dim, num_attenion_heads, down_sample):
+    def __init__(self, in_channels, out_channels, embedding_dim, num_attenion_heads):
         """
         bottle neck layer between downsample block and upsample block
         :param in_channels:
         :param out_channels:
         :param embedding_dim:
         :param num_attention_heads: number of attention heads
-        :param down_sample: down sample or not True/False
         """
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.embedding_dim = embedding_dim
         self.num_attention_heads = num_attenion_heads
-        self.down_sample = down_sample
 
         # here, we actually need two instances of the same kind of layers as used in DownsBlock
         self.resnet_conv_block_1 = nn.ModuleList([
@@ -176,4 +173,39 @@ class BottleNeck(nn.Module):
 
     def forward(self, x, time_embedding):
         # the only difference here is the way we stitch the layers together
-        pass
+        out = x
+
+        # ResNet block 1
+        resnet_input = out
+        out = self.resnet_conv_block_1[0](resnet_input)
+        out += self.time_embedding_network[0](time_embedding)[:, :, None, None]
+
+        # ResNet block 2
+        out = self.resnet_conv_block_2[0](out)
+        out += self.residual_connection[0](resnet_input)
+
+        # Attention for all the (h * w) pixels
+
+        B, C, H, W = out.shape
+        input_attn = out.reshape(B, C, H * W)
+        input_attn = input_attn.transpose(1, 2)
+        input_attn = self.attention_block_norm(input_attn).transpose(1, 2)
+
+        output_attn, _ = self.attention_block_multihead(input_attn, input_attn, input_attn)
+        output_attn = output_attn.tranpose(1, 2).reshape(B, C, H, W)
+
+        out += output_attn
+        
+        # Repeat for 1
+        resnet_input = out
+        out = self.resnet_conv_block_1[1](resnet_input)
+        out += self.time_embedding_network[1](time_embedding)[:, :, None, None]
+        out = self.resnet_conv_block_2[1](out)
+        out += self.residual_connection[1](resnet_input)
+
+        return out
+    
+
+class UpBlock(nn.Module):
+    def __init__(self):
+        super().__init__()
