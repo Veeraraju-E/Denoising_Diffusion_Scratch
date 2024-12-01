@@ -45,7 +45,7 @@ def get_time_embedding(time_steps, embedding_dim):
 # (x_2, cat with x_3) -> Down Sample -> z
 
 class DownsBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, embedding_dim, down_sample, num_attenion_heads):
+    def __init__(self, in_channels, out_channels, embedding_dim, num_attention_heads, down_sample):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -71,7 +71,7 @@ class DownsBlock(nn.Module):
 
         # The Attention Block
         self.attention_block_norm = nn.GroupNorm(num_groups=8, num_channels=self.out_channels)
-        self.attention_block_multihead = nn.MultiheadAttention(self.out_channels, num_attenion_heads, batch_first=True)
+        self.attention_block_multihead = nn.MultiheadAttention(self.out_channels, num_attention_heads, batch_first=True)
 
         # a simple 1x1 Conv to make residual connection from the input to the output of the last conv layer
         self.residual_connection = nn.Conv2d(self.in_channels, self.out_channels, 1)
@@ -207,5 +207,79 @@ class BottleNeck(nn.Module):
     
 
 class UpBlock(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels, out_channels, embedding_dim, num_attention_heads, up_sample):
         super().__init__()
+
+        ################################# Same as DownBlock #################################
+        # Simple network for obtaining the actual time embeddings
+        self.time_embedding_network = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(embedding_dim, out_channels)
+        )
+
+        self.resnet_block_conv_1 = nn.Sequential(
+            nn.GroupNorm(num_groups=8, num_channels=self.in_channels),
+            nn.SiLU(),
+            nn.Conv2d(self.in_channels, self.out_channels, 3, 1, 1)
+        )
+
+        self.resnet_block_conv_2 = nn.Sequential(
+            nn.GroupNorm(num_groups=8, num_channels=self.out_channels),
+            nn.SiLU(),
+            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1)
+        )
+
+        # The Attention Block
+        self.attention_block_norm = nn.GroupNorm(num_groups=8, num_channels=self.out_channels)
+        self.attention_block_multihead = nn.MultiheadAttention(self.out_channels, num_attention_heads, batch_first=True)
+
+        # a simple 1x1 Conv to make residual connection from the input to the output of the last conv layer
+        self.residual_connection = nn.Conv2d(self.in_channels, self.out_channels, 1)
+        ################################# Same as DownBlock ################################# 
+
+        # up sampling layer
+        self.up_sample = nn.ConvTranspose2d(self.in_channels // 2, self.in_channels // 2, kernel_size=4, stride=2, padding=1) \
+            if self.up_sample else nn.Identity()
+        
+    def forward(self, x, output_downs_block, time_embedding):
+        
+        # Upsample first
+        x = self.up_sample(x)
+        x = torch.cat([x, output_downs_block], dim=1)
+
+        ################################# Same as DownBlock #################################
+        out = x
+
+        # Resnet block 1
+        resnet_input = out
+        out = self.resnet_conv_block_1(resnet_input)
+        out += self.time_embedding_network(time_embedding)[:, :, None, None]
+
+        # Resnet block 2
+        out = self.resnet_conv_block_2(out)
+        out += self.residual_connection(out)
+
+        # Attention between all the h * w pixels
+        B, C, H, W = out.shape
+        input_attn = out.reshape(B, C, H * W)
+        input_attn = self.attention_block_norm(input_attn)
+        input_attn = input_attn.transpose(1, 2) # ensure that channels is at end to apply attention
+
+        output_attn, _ = self.attention_block_multihead(input_attn, input_attn, input_attn)
+        output_attn = output_attn.transpose(1, 2).reshape(B, C, H, W)   # reshape after briging back the colors dim to match input
+        
+        out += output_attn  # add back the residual connection
+        return out
+        ################################# Same as DownBlock ################################# 
+    
+        
+class UNET(nn.Module):
+    def __init__(self, in_channels, down_channels=[32, 64, 128, 256], bottleneck_channels=[256, 256, 128], embedding_dim=128, down_sample=[True, True, True]):
+        super().__init__()
+        self.in_channels = in_channels
+        self.down_channels = down_channels
+        self.bottleneck_channels = bottleneck_channels
+        self.embedding_dim = embedding_dim
+        self.down_sample = down_sample
+
+        
