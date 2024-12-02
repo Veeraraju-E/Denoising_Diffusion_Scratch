@@ -209,6 +209,9 @@ class BottleNeck(nn.Module):
 class UpBlock(nn.Module):
     def __init__(self, in_channels, out_channels, embedding_dim, num_attention_heads, up_sample):
         super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.up_sample = up_sample
 
         ################################# Same as DownBlock #################################
         # Simple network for obtaining the actual time embeddings
@@ -281,5 +284,85 @@ class UNET(nn.Module):
         self.bottleneck_channels = bottleneck_channels
         self.embedding_dim = embedding_dim
         self.down_sample = down_sample
+        self.up_sample = list(reversed(self.down_sample))
 
+        # for initial timestamp representation
+        self.time_proj = nn.Sequential(
+            nn.Linear(self.embedding_dim, self.embedding_dim),
+            nn.SiLU(),
+            nn.Linear(self.embedding_dim, self.embedding_dim)
+        )
+
+        self.input_conv_first = nn.Conv2d(self.in_channels, self.down_channels[0], kernel_size=3, padding=1)
         
+        # Complete Downs Unit
+        self.DownsUnit = nn.ModuleList([])
+        for i in range(len(self.down_channels) - 1):
+            self.DownsUnit.append(
+                DownsBlock(
+                in_channels=self.down_channels[i], 
+                out_channels=self.down_channels[i + 1], 
+                embedding_dim=self.embedding_dim, 
+                num_attention_heads=4, 
+                down_sample=self.down_sample,
+                )
+            )
+
+        # Complete bottleneck layer
+        self.BottleneckUnit = nn.ModuleList([])
+        for i in range(len(self.bottleneck_channels) - 1):
+            self.BottleneckUnit.append(
+                BottleNeck(
+                    in_channels=self.bottleneck_channels[i],
+                    out_channels=self.bottleneck_channels[i + 1],
+                    embedding_dim=self.embedding_dim,
+                    num_attenion_heads=4,
+                )
+            )
+
+        # Complete Ups Unit
+        self.UpsUnit = nn.ModuleList([])
+        for i in reversed(range(len(self.down_channels) - 1)):
+            self.UpsUnit.append(
+                UpBlock(
+                in_channels=self.down_channels[i] * 2, 
+                out_channels=self.down_channels[i - 1] if i else 16, 
+                embedding_dim=self.embedding_dim, 
+                num_attention_heads=4, 
+                up_sample=self.down_sample[i],
+                )
+            )
+
+        # Output of last layer of UpsUnit needs to also undergo normalization
+        self.output_norm = nn.GroupNorm(8, 16)
+        self.output_conv_last = nn.Conv2d(16, self.in_channels, kernel_size=3, padding=1)
+
+    def forward(self, x, timestamp):
+        # x is 4, 32,28, 28 for MNIST
+        out = self.input_conv_first(x)
+
+        # Get the embedding for the timestamp info
+        time_embedding = get_time_embedding(time_steps=timestamp, embedding_dim=self.embedding_dim)
+        time_embedding = self.time_proj(time_embedding)
+
+        # Run thru Downs Unit
+        skip_connections_from_downs_unit = []
+        for down_block in self.DownsUnit:
+            skip_connections_from_downs_unit.append(out)
+            out = down_block(out, time_embedding)
+
+        # Now, thru bottleneck
+        for bottleneck_block in self.BottleneckUnit:
+            out = bottleneck_block(out)
+
+        # Lastly, thru Ups Unit
+        for up_block in self.UpsUnit:
+            down_block_output = skip_connections_from_downs_unit.pop()
+            out = up_block(out, down_block_output, time_embedding)
+
+        # Finally, thru lst bits to match dimension back
+        out = self.output_norm(out)
+        out = nn.SiLU()(out)    # imp
+        out = self.output_conv_last(out)
+
+        return out
