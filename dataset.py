@@ -1,4 +1,3 @@
-import torch
 from PIL.Image import Image
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
@@ -36,5 +35,6 @@ class MNISTDataset(Dataset):
         image = t1(image)
 
         image = 2*image - 1 # scale image to be between -1 and 1
-        
-        return image 
+        label = self.labels[index]
+
+        return image, label

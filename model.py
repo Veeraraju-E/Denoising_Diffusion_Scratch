@@ -338,7 +338,7 @@ class UNET(nn.Module):
         self.output_conv_last = nn.Conv2d(16, self.in_channels, kernel_size=3, padding=1)
 
     def forward(self, x, timestamp):
-        # x is 4, 32,28, 28 for MNIST
+        # x is [4, B, 28, 28] for MNIST
         out = self.input_conv_first(x)
 
         # Get the embedding for the timestamp info
@@ -362,7 +362,8 @@ class UNET(nn.Module):
 
         # Finally, thru lst bits to match dimension back
         out = self.output_norm(out)
-        out = nn.SiLU()(out)    # imp
+        a1 = nn.SiLU()
+        out = a1(out)    # imp
         out = self.output_conv_last(out)
 
         return out
