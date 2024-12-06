@@ -329,7 +329,7 @@ class UNET(nn.Module):
                 out_channels=self.down_channels[i - 1] if i else 16, 
                 embedding_dim=self.embedding_dim, 
                 num_attention_heads=4, 
-                up_sample=self.down_sample[i],
+                up_sample=self.down_sample[i]
                 )
             )
 

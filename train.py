@@ -1,10 +1,10 @@
-import torch
-import torchvision.transforms as transforms
-from torch.utils.data import Dataset, DataLoader
+import os
 from tqdm import tqdm
 import yaml as yaml
-import os
 import numpy as np
+import argparse
+import torch
+from torch.utils.data import DataLoader
 from noise_scheduler import LinearNoiseScheduler
 from dataset import MNISTDataset
 from model import UNET
@@ -66,7 +66,7 @@ def train(args):
     criterion = torch.nn.MSELoss()
 
     #### Training Loop ####
-    for epoch in num_epochs:
+    for epoch in range(num_epochs):
         losses = []
 
         for images, _ in tqdm(mnist_dataloader):
@@ -75,15 +75,22 @@ def train(args):
 
             # First, generate random noise and timestamp to add to image
             noise = torch.randn_like(images).to(device)
-            t = torch.randint(0, diffusion_config['num_timestampls'], (images.shape[0],)).to(device)
+            t = torch.randint(0, diffusion_config['num_timesteps'], (images.shape[0],)).to(device)
 
             noisy_images = noise_scheduler.add_noise(images, noise, t)
             pred_for_noisy_image = model(noisy_images, t)
 
-            loss = criterion(noisy_images, pred_for_noisy_image)
+            loss = criterion(pred_for_noisy_image, noise)
             losses.append(loss.item())
             loss.backward()
             optimizer.step()
 
         print(f"Finished epoch : {epoch + 1}, avg_cum_loss : {np.mean(losses):.4f}")
         torch.save(model.state_dict(), ckpt_path)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Arguments for unconditional DDPM sampling')
+    parser.add_argument("--config", dest='config_path', default='config.yaml', type=str)
+    args = parser.parse_args()
+
+    train(args)
