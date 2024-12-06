@@ -1,9 +1,10 @@
+import os
+import argparse
+from tqdm import tqdm
+import yaml as yaml
 import torch
 from torchvision.utils import make_grid
 import torchvision.transforms as transforms
-from tqdm import tqdm
-import yaml as yaml
-import os
 from noise_scheduler import LinearNoiseScheduler
 from model import UNET
 
@@ -67,7 +68,7 @@ def infer(args):
 
     # Load Model
     model = UNET(model_config).to(device)
-    ckpt_path = os.path.join(train_config['config_name'], train_config['ckpt_name'])
+    ckpt_path = os.path.join(train_config['task_name'], train_config['ckpt_name'])
     model.load_state_dict(torch.load(ckpt_path, map_location=device))
     model.eval()
 
@@ -75,3 +76,11 @@ def infer(args):
         sample(model, noise_scheduler, train_config, model_config, diffusion_config)
 
     print("[INFO] : Finished Inference. Check folder for sampled outputs")
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Arguments for unconditional DDPM sampling')
+    parser.add_argument("--config", dest='config_path', default='config.yaml', type=str)
+    args = parser.parse_args()
+
+    infer(args)
