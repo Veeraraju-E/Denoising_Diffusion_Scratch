@@ -16,7 +16,7 @@ class LinearNoiseScheduler:
         self.beta_end = beta_end
 
         # All the betas to linearly increase from start to end
-        self.betas = torch.linspace(self.betas_start, self.betas_end, self.num_timesteps)
+        self.betas = torch.linspace(self.beta_start, self.beta_end, self.num_timesteps)
 
         # alpha_t = 1 - beta_t
         self.alphas = 1. - self.betas

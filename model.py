@@ -168,9 +168,6 @@ class BottleNeck(nn.Module):
             nn.Conv2d(self.out_channels, self.out_channels, 1)
         ])
 
-        self.down_sample_conv_block = nn.Conv2d(out_channels, out_channels, kernel_size=4, stride=2, padding=1) \
-            if self.down_sample else nn.Identity()
-
     def forward(self, x, time_embedding):
         # the only difference here is the way we stitch the layers together
         out = x
@@ -279,7 +276,8 @@ class UpBlock(nn.Module):
 class UNET(nn.Module):
     def __init__(self, in_channels, down_channels=[32, 64, 128, 256], bottleneck_channels=[256, 256, 128], embedding_dim=128, down_sample=[True, True, True]):
         super().__init__()
-        self.in_channels = in_channels
+        # print(in_channels, down_channels, bottleneck_channels, embedding_dim, down_sample)
+        self.in_channels = in_channels['image_channels']
         self.down_channels = down_channels
         self.bottleneck_channels = bottleneck_channels
         self.embedding_dim = embedding_dim
@@ -292,7 +290,7 @@ class UNET(nn.Module):
             nn.SiLU(),
             nn.Linear(self.embedding_dim, self.embedding_dim)
         )
-
+        # print(self.in_channels, self.down_channels)
         self.input_conv_first = nn.Conv2d(self.in_channels, self.down_channels[0], kernel_size=3, padding=1)
         
         # Complete Downs Unit

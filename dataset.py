@@ -1,4 +1,4 @@
-from PIL.Image import Image
+from PIL import Image
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 import os
@@ -20,7 +20,7 @@ class MNISTDataset(Dataset):
         loop = tqdm(os.listdir(image_path))
 
         for d_name in loop:
-            for f_name in glob.glob(os.path.join(d_name, f_name, '*.png')):
+            for f_name in glob.glob(os.path.join(image_path, d_name, '*.png')):
                 images.append(f_name)
                 labels.append(int(d_name))
         

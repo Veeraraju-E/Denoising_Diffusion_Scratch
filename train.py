@@ -55,7 +55,7 @@ def train(args):
         os.mkdir(train_config['task_name'])
 
     # Checkpoint if found
-    ckpt_path = os.path.join(train_config['config_name'], train_config['ckpt_name'])
+    ckpt_path = os.path.join(train_config['task_name'], train_config['ckpt_name'])
     if os.path.exists(ckpt_path):
         print(f"[INFO] : Loading checkpoint from {ckpt_path}")
         model.load_state_dict(torch.load(ckpt_path, map_location=device))
